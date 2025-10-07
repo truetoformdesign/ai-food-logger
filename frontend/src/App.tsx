@@ -25,28 +25,24 @@ function App() {
     setIsLoading(true);
     
     try {
+      // Use Netlify Functions
       const formData = new FormData();
       formData.append('audio', audioBlob, 'voice-recording.m4a');
 
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${apiUrl}/api/log/voice`, {
+      const response = await fetch('/.netlify/functions/log-voice', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        errorLogger.log('error', `API Error: ${response.status} - ${errorText}`, 'handleVoiceLog');
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data: VoiceLogResponse = await response.json();
-      
-      // Add the new food items to our entries
       setFoodEntries(prev => [...prev, ...data.items]);
-      
       errorLogger.log('info', `Successfully logged ${data.items.length} food items`, 'handleVoiceLog');
       return data;
+      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       errorLogger.log('error', `Voice logging failed: ${errorMessage}`, 'handleVoiceLog', error instanceof Error ? error.stack : undefined);

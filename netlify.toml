@@ -4,6 +4,9 @@
   
   # Directory to publish
   publish = "build"
+  
+  # Functions directory
+  functions = "netlify/functions"
 
 [build.environment]
   # Node version

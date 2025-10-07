@@ -95,9 +95,8 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
     if (!textInput.trim()) return;
     
     try {
-      // Create a text-based request to the API
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${apiUrl}/api/log/text`, {
+      // Use Netlify Functions
+      const response = await fetch('/.netlify/functions/log-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
