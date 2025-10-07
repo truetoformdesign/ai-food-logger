@@ -47,7 +47,15 @@ function App() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       errorLogger.log('error', `Voice logging failed: ${errorMessage}`, 'handleVoiceLog', error instanceof Error ? error.stack : undefined);
       console.error('Error logging food:', error);
-      throw error;
+      
+      // Show user-friendly error message
+      if (errorMessage.includes('Failed to fetch')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      } else if (errorMessage.includes('HTTP error')) {
+        throw new Error('Server error. Please try again in a moment.');
+      } else {
+        throw new Error('Failed to process voice recording. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
