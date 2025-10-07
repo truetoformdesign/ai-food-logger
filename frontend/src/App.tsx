@@ -29,7 +29,7 @@ function App() {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'voice-recording.m4a');
 
-      const response = await fetch('/.netlify/functions/process-voice', {
+      const response = await fetch('/.netlify/functions/transcribe-voice', {
         method: 'POST',
         body: formData,
       });

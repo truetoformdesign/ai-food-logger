@@ -54,3 +54,4 @@ declare module 'quagga' {
   const Quagga: QuaggaStatic;
   export default Quagga;
 }
+
