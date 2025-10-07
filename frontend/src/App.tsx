@@ -105,6 +105,7 @@ function App() {
         <div className="flex-1 px-6 py-6">
           <FoodLogInterface 
             onVoiceLog={handleVoiceLog}
+            onBarcodeScan={(foodItem) => setFoodEntries(prev => [...prev, foodItem])}
             isLoading={isLoading}
             foodEntries={foodEntries}
             totalCalories={totalCalories}

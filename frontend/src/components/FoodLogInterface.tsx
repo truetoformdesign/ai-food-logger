@@ -1,11 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Keyboard, Loader2, Trash2, CheckCircle } from 'lucide-react';
+import { Mic, MicOff, Keyboard, Loader2, Trash2, CheckCircle, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { FoodItem, VoiceLogResponse } from '../types';
+import BarcodeScanner from './BarcodeScanner';
+import { barcodeService } from '../services/barcodeService';
 
 interface FoodLogInterfaceProps {
   onVoiceLog: (audioBlob: Blob) => Promise<VoiceLogResponse>;
+  onBarcodeScan: (foodItem: FoodItem) => void;
   isLoading: boolean;
   foodEntries: FoodItem[];
   totalCalories: number;
@@ -13,6 +16,7 @@ interface FoodLogInterfaceProps {
 
 const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
   onVoiceLog,
+  onBarcodeScan,
   isLoading,
   foodEntries,
   totalCalories
@@ -21,6 +25,7 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -96,7 +101,6 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
@@ -125,6 +129,34 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleBarcodeScan = async (barcode: string) => {
+    try {
+      toast.loading('Looking up product...', { id: 'barcode-lookup' });
+      
+      const foodItem = await barcodeService.lookupProduct(barcode);
+      
+      if (foodItem) {
+        onBarcodeScan(foodItem);
+        toast.success(`Added ${foodItem.name} to your log!`, {
+          id: 'barcode-lookup',
+          icon: '📱',
+        });
+        setShowBarcodeScanner(false);
+      } else {
+        toast.error('Product not found. Please try again.', {
+          id: 'barcode-lookup',
+          icon: '❌',
+        });
+      }
+    } catch (error) {
+      console.error('Barcode scan error:', error);
+      toast.error('Failed to process barcode. Please try again.', {
+        id: 'barcode-lookup',
+        icon: '❌',
+      });
+    }
+  };
+
   const removeFoodItem = (index: number) => {
     // This would need to be implemented with proper state management
     toast('Remove functionality coming soon!', {
@@ -142,7 +174,7 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
               What have you eaten today?
             </h2>
             <p className="text-sm text-gray-500">
-              Start logging your food
+              Just say what you've eaten today, type it out, or scan a barcode
             </p>
           </div>
 
@@ -188,6 +220,16 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
               className="flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-all duration-200"
             >
               <Keyboard className="w-6 h-6" />
+            </motion.button>
+
+            {/* Barcode Scanner Button */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setShowBarcodeScanner(true)}
+              className="flex items-center justify-center w-16 h-16 rounded-full bg-green-100 hover:bg-green-200 text-green-600 transition-all duration-200"
+            >
+              <Camera className="w-6 h-6" />
             </motion.button>
           </div>
 
@@ -358,6 +400,16 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
           </p>
         </motion.div>
       )}
+
+      {/* Barcode Scanner Modal */}
+      <AnimatePresence>
+        {showBarcodeScanner && (
+          <BarcodeScanner
+            onScan={handleBarcodeScan}
+            onClose={() => setShowBarcodeScanner(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
