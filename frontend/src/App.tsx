@@ -106,6 +106,12 @@ function App() {
           <FoodLogInterface 
             onVoiceLog={handleVoiceLog}
             onBarcodeScan={(foodItem) => setFoodEntries(prev => [...prev, foodItem])}
+            onUpdateItem={(index, updatedItem) => {
+              setFoodEntries(prev => prev.map((item, i) => i === index ? updatedItem : item));
+            }}
+            onDeleteItem={(index) => {
+              setFoodEntries(prev => prev.filter((_, i) => i !== index));
+            }}
             isLoading={isLoading}
             foodEntries={foodEntries}
             totalCalories={totalCalories}

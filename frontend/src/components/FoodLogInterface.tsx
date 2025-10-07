@@ -1,14 +1,17 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Keyboard, Loader2, Trash2, CheckCircle, Camera } from 'lucide-react';
+import { Mic, MicOff, Keyboard, Loader2, CheckCircle, Camera } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { FoodItem, VoiceLogResponse } from '../types';
 import BarcodeScanner from './BarcodeScanner';
+import EditableFoodItem from './EditableFoodItem';
 import { barcodeService } from '../services/barcodeService';
 
 interface FoodLogInterfaceProps {
   onVoiceLog: (audioBlob: Blob) => Promise<VoiceLogResponse>;
   onBarcodeScan: (foodItem: FoodItem) => void;
+  onUpdateItem: (index: number, updatedItem: FoodItem) => void;
+  onDeleteItem: (index: number) => void;
   isLoading: boolean;
   foodEntries: FoodItem[];
   totalCalories: number;
@@ -17,6 +20,8 @@ interface FoodLogInterfaceProps {
 const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
   onVoiceLog,
   onBarcodeScan,
+  onUpdateItem,
+  onDeleteItem,
   isLoading,
   foodEntries,
   totalCalories
@@ -157,12 +162,6 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
     }
   };
 
-  const removeFoodItem = (index: number) => {
-    // This would need to be implemented with proper state management
-    toast('Remove functionality coming soon!', {
-      icon: 'ℹ️',
-    });
-  };
 
   return (
     <div className="space-y-6">
@@ -301,84 +300,13 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
             <h3 className="text-lg font-semibold text-gray-900">Today's Food</h3>
             
             {foodEntries.map((item, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="group bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-lg transition-all duration-200 hover:border-gray-200"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <h4 className="font-semibold text-gray-900 text-lg">{item.name}</h4>
-                      {item.brand && (
-                        <span 
-                          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium text-white"
-                          style={{ backgroundColor: item.brand.color }}
-                        >
-                          <span className="mr-1">{item.brand.icon}</span>
-                          {item.brand.name}
-                        </span>
-                      )}
-                      {item.quantity && item.unit && (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                          {item.quantity} {item.unit}
-                        </span>
-                      )}
-                    </div>
-                    
-                    {item.description && (
-                      <p className="text-sm text-gray-600 mb-2">{item.description}</p>
-                    )}
-                    
-                    {item.context && (
-                      <div className="flex items-center space-x-1 mb-2">
-                        <span className="text-xs text-gray-500">from</span>
-                        <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-1 rounded-md">
-                          {item.context}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Inline Health Insights for this item */}
-                    {item.insights && item.insights.length > 0 && (
-                      <div className="mt-3 space-y-1">
-                        {item.insights.map((insight, insightIndex) => (
-                          <div
-                            key={insightIndex}
-                            className={`inline-flex items-center space-x-1 px-2 py-1 rounded-md text-xs ${
-                              insight.type === 'warning' 
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                : insight.type === 'positive'
-                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                            }`}
-                          >
-                            <span>{insight.icon}</span>
-                            <span className="font-medium">{insight.title}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center space-x-3 ml-4">
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-gray-900">
-                        {item.estimatedCalories}
-                      </div>
-                      <div className="text-xs text-gray-500">calories</div>
-                    </div>
-                    <button
-                      onClick={() => removeFoodItem(index)}
-                      className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
+              <EditableFoodItem
+                key={`${item.name}-${index}`}
+                item={item}
+                index={index}
+                onUpdate={onUpdateItem}
+                onDelete={onDeleteItem}
+              />
             ))}
           </motion.div>
         )}

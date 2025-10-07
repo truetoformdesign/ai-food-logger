@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BrowserMultiFormatReader } from '@zxing/library';
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
 import { motion } from 'framer-motion';
 import { Camera, X, CheckCircle, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -13,6 +13,8 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
+  const [manualInput, setManualInput] = useState('');
+  const [showManualInput, setShowManualInput] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
 
@@ -30,7 +32,28 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       setError(null);
       setIsScanning(true);
       
-      const reader = new BrowserMultiFormatReader();
+      // Configure reader with specific barcode formats for better detection
+      const hints = new Map();
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13,
+        BarcodeFormat.EAN_8,
+        BarcodeFormat.UPC_A,
+        BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_128,
+        BarcodeFormat.CODE_39,
+        BarcodeFormat.CODE_93,
+        BarcodeFormat.CODABAR,
+        BarcodeFormat.ITF,
+        BarcodeFormat.RSS_14,
+        BarcodeFormat.RSS_EXPANDED,
+        BarcodeFormat.QR_CODE,
+        BarcodeFormat.DATA_MATRIX,
+        BarcodeFormat.AZTEC,
+        BarcodeFormat.PDF_417
+      ]);
+      hints.set(DecodeHintType.TRY_HARDER, true);
+      
+      const reader = new BrowserMultiFormatReader(hints);
       readerRef.current = reader;
 
       // Get available video devices
@@ -43,7 +66,7 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       // Use the first available camera (usually the back camera on mobile)
       const selectedDevice = videoInputDevices[0];
       
-      // Start decoding from video
+      // Start decoding from video with better error handling
       await reader.decodeFromVideoDevice(selectedDevice.deviceId, videoRef.current!, (result, error) => {
         if (result) {
           const code = result.getText();
@@ -60,9 +83,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
           onScan(code);
         }
         
-        if (error && error.name !== 'NotFoundException') {
-          console.error('Barcode scanning error:', error);
-          setError(error.message);
+        if (error) {
+          // Only show errors that aren't "not found" (which is normal during scanning)
+          if (error.name !== 'NotFoundException' && error.name !== 'ChecksumException') {
+            console.error('Barcode scanning error:', error);
+            setError(`Scanning error: ${error.message}`);
+          }
         }
       });
 
@@ -84,6 +110,15 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const handleClose = () => {
     stopScanning();
     onClose();
+  };
+
+  const handleManualSubmit = () => {
+    if (manualInput.trim()) {
+      onScan(manualInput.trim());
+      setManualInput('');
+      setShowManualInput(false);
+      onClose();
+    }
   };
 
   return (
@@ -164,7 +199,37 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
             <li>• Point your camera at the barcode</li>
             <li>• Ensure good lighting</li>
             <li>• Hold steady until detected</li>
+            <li>• Or enter barcode manually below</li>
           </ul>
+        </div>
+
+        {/* Manual Input */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowManualInput(!showManualInput)}
+            className="w-full text-sm text-blue-600 hover:text-blue-700 underline"
+          >
+            {showManualInput ? 'Hide' : 'Enter barcode manually'}
+          </button>
+          
+          {showManualInput && (
+            <div className="mt-3 space-y-2">
+              <input
+                type="text"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                placeholder="Enter barcode number"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                onClick={handleManualSubmit}
+                disabled={!manualInput.trim()}
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Add Product
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Controls */}
