@@ -27,8 +27,10 @@ function App() {
     try {
       // Use Netlify Functions
       const formData = new FormData();
-      formData.append('audio', audioBlob, 'voice-recording.m4a');
+      formData.append('audio', audioBlob, `voice-recording-${Date.now()}.m4a`);
 
+      console.log(`Sending audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+      
       const response = await fetch('/.netlify/functions/transcribe-voice', {
         method: 'POST',
         body: formData,
@@ -39,6 +41,7 @@ function App() {
       }
 
       const data: VoiceLogResponse = await response.json();
+      console.log('Received response:', data);
       setFoodEntries(prev => [...prev, ...data.items]);
       errorLogger.log('info', `Successfully logged ${data.items.length} food items`, 'handleVoiceLog');
       return data;
