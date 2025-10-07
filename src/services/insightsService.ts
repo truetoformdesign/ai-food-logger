@@ -94,8 +94,23 @@ Examples:
         cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
 
-      // Parse the JSON response
-      const insights = JSON.parse(cleanedResponse);
+      // Additional cleaning for common JSON issues
+      cleanedResponse = cleanedResponse
+        .replace(/,\s*}/g, '}') // Remove trailing commas
+        .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+        .replace(/\n/g, ' ') // Replace newlines with spaces
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+
+      // Parse the JSON response with better error handling
+      let insights;
+      try {
+        insights = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error('JSON parse error in insights:', parseError);
+        console.error('Cleaned response:', cleanedResponse);
+        return [];
+      }
       
       // Validate the response structure
       if (!Array.isArray(insights)) {
@@ -182,8 +197,23 @@ Examples of insights to provide:
         cleanedResponse = cleanedResponse.replace(/^```\s*/, '').replace(/\s*```$/, '');
       }
 
-      // Parse the JSON response
-      const insights = JSON.parse(cleanedResponse);
+      // Additional cleaning for common JSON issues
+      cleanedResponse = cleanedResponse
+        .replace(/,\s*}/g, '}') // Remove trailing commas
+        .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+        .replace(/\n/g, ' ') // Replace newlines with spaces
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+
+      // Parse the JSON response with better error handling
+      let insights;
+      try {
+        insights = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error('JSON parse error in insights:', parseError);
+        console.error('Cleaned response:', cleanedResponse);
+        return [];
+      }
       
       // Validate the response structure
       if (!Array.isArray(insights)) {
