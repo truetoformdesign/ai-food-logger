@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library';
+import Quagga from 'quagga';
 import { motion } from 'framer-motion';
-import { Camera, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Camera, X, CheckCircle, RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface BarcodeScannerProps {
@@ -15,14 +15,16 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   const [scannedCode, setScannedCode] = useState<string | null>(null);
   const [manualInput, setManualInput] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const scannerRef = useRef<HTMLDivElement>(null);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
     return () => {
       // Cleanup on unmount
-      if (readerRef.current) {
-        readerRef.current.reset();
+      if (isInitialized.current) {
+        Quagga.stop();
+        isInitialized.current = false;
       }
     };
   }, []);
@@ -32,62 +34,96 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       setError(null);
       setIsScanning(true);
       
-      // Configure reader with specific barcode formats for better detection
-      const hints = new Map();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.CODE_93,
-        BarcodeFormat.CODABAR,
-        BarcodeFormat.ITF,
-        BarcodeFormat.RSS_14,
-        BarcodeFormat.RSS_EXPANDED,
-        BarcodeFormat.QR_CODE,
-        BarcodeFormat.DATA_MATRIX,
-        BarcodeFormat.AZTEC,
-        BarcodeFormat.PDF_417
-      ]);
-      hints.set(DecodeHintType.TRY_HARDER, true);
-      
-      const reader = new BrowserMultiFormatReader(hints);
-      readerRef.current = reader;
-
-      // Get available video devices
-      const videoInputDevices = await reader.listVideoInputDevices();
-      
-      if (videoInputDevices.length === 0) {
-        throw new Error('No camera found. Please ensure you have a camera connected.');
+      if (!scannerRef.current) {
+        throw new Error('Scanner container not found');
       }
 
-      // Use the first available camera (usually the back camera on mobile)
-      const selectedDevice = videoInputDevices[0];
-      
-      // Start decoding from video with better error handling
-      await reader.decodeFromVideoDevice(selectedDevice.deviceId, videoRef.current!, (result, error) => {
-        if (result) {
-          const code = result.getText();
-          setScannedCode(code);
-          setIsScanning(false);
-          reader.reset();
-          
-          toast.success(`Barcode detected: ${code}`, {
-            icon: '📱',
-            duration: 3000,
-          });
-          
-          // Call the parent's onScan callback
-          onScan(code);
-        }
+      // Configure Quagga for optimal barcode detection
+      const config = {
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: scannerRef.current,
+          constraints: {
+            width: 640,
+            height: 480,
+            facingMode: cameraFacing, // Use back camera by default
+          },
+        },
+        locator: {
+          patchSize: "medium",
+          halfSample: true,
+        },
+        numOfWorkers: 2,
+        frequency: 10,
+        decoder: {
+          readers: [
+            "code_128_reader",
+            "ean_reader",
+            "ean_8_reader",
+            "code_39_reader",
+            "code_39_vin_reader",
+            "codabar_reader",
+            "upc_reader",
+            "upc_e_reader",
+            "i2of5_reader"
+          ],
+        },
+        locate: true,
+      };
+
+      // Initialize Quagga
+      await new Promise<void>((resolve, reject) => {
+        Quagga.init(config, (err) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          isInitialized.current = true;
+          Quagga.start();
+          resolve();
+        });
+      });
+
+      // Listen for successful barcode detection
+      Quagga.onDetected((result) => {
+        const code = result.codeResult.code;
+        setScannedCode(code);
+        setIsScanning(false);
+        Quagga.stop();
         
-        if (error) {
-          // Only show errors that aren't "not found" (which is normal during scanning)
-          if (error.name !== 'NotFoundException' && error.name !== 'ChecksumException') {
-            console.error('Barcode scanning error:', error);
-            setError(`Scanning error: ${error.message}`);
+        toast.success(`Barcode detected: ${code}`, {
+          icon: '📱',
+          duration: 3000,
+        });
+        
+        // Call the parent's onScan callback
+        onScan(code);
+      });
+
+      // Listen for errors
+      Quagga.onProcessed((result) => {
+        if (result && result.boxes) {
+          const drawingCtx = Quagga.canvas.ctx.overlay;
+          const drawingCanvas = Quagga.canvas.dom.overlay;
+          
+          if (result.boxes) {
+            const width = drawingCanvas.getAttribute("width");
+            const height = drawingCanvas.getAttribute("height");
+            if (width && height) {
+              drawingCtx.clearRect(0, 0, parseInt(width), parseInt(height));
+            }
+            result.boxes.filter((box) => box !== result.box).forEach((box) => {
+              Quagga.ImageDebug.drawPath(box, { x: 0, y: 1 }, drawingCtx, { color: "green", lineWidth: 2 });
+            });
+          }
+          
+          if (result.box) {
+            Quagga.ImageDebug.drawPath(result.box, { x: 0, y: 1 }, drawingCtx, { color: "#00F", lineWidth: 2 });
+          }
+          
+          if (result.codeResult && result.codeResult.code) {
+            Quagga.ImageDebug.drawPath(result.line, { x: 'x', y: 'y' }, drawingCtx, { color: 'red', lineWidth: 3 });
           }
         }
       });
@@ -100,11 +136,21 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
   };
 
   const stopScanning = () => {
-    if (readerRef.current) {
-      readerRef.current.reset();
+    if (isInitialized.current) {
+      Quagga.stop();
+      isInitialized.current = false;
     }
     setIsScanning(false);
     setScannedCode(null);
+  };
+
+  const switchCamera = () => {
+    const newFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(newFacing);
+    if (isScanning) {
+      stopScanning();
+      setTimeout(() => startScanning(), 500);
+    }
   };
 
   const handleClose = () => {
@@ -126,69 +172,47 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4"
     >
       <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white rounded-2xl p-6 mx-4 max-w-md w-full"
+        initial={{ y: 50, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 50, opacity: 0 }}
+        className="relative bg-white rounded-lg shadow-xl w-full max-w-md p-6"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-2">
-            <Camera className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-semibold text-gray-900">Scan Barcode</h3>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
+        <button
+          onClick={handleClose}
+          className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 z-10"
+        >
+          <X size={24} />
+        </button>
+        <h2 className="text-2xl font-bold text-gray-800 mb-4 text-center">Scan Barcode</h2>
 
-        {/* Scanner Area */}
-        <div className="relative bg-gray-100 rounded-xl overflow-hidden mb-4">
-          <video
-            ref={videoRef}
-            className="w-full h-64 object-cover"
-            playsInline
-            muted
-          />
-          
-          {/* Scanning Overlay */}
-          {isScanning && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="bg-black bg-opacity-50 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Scanning...</span>
-              </div>
-            </div>
-          )}
-
-          {/* Success Overlay */}
-          {scannedCode && (
-            <div className="absolute inset-0 bg-green-500 bg-opacity-90 flex items-center justify-center">
-              <div className="text-white text-center">
-                <CheckCircle className="w-12 h-12 mx-auto mb-2" />
-                <p className="font-semibold">Barcode Scanned!</p>
-                <p className="text-sm opacity-90">{scannedCode}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Error Display */}
         {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-2">
-            <AlertCircle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-red-800">Camera Error</p>
-              <p className="text-xs text-red-600 mt-1">{error}</p>
-            </div>
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong className="font-bold">Error:</strong>
+            <span className="block sm:inline"> {error}</span>
           </div>
         )}
+
+        {/* Scanner Container */}
+        <div className="relative w-full h-64 bg-gray-200 rounded-lg overflow-hidden mb-4">
+          <div ref={scannerRef} className="w-full h-full"></div>
+          {!isScanning && !scannedCode && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-800 bg-opacity-75 text-white text-center p-4">
+              <div className="text-center">
+                <Camera size={48} className="mx-auto mb-2" />
+                <p>Tap "Start Scanning" to activate camera</p>
+              </div>
+            </div>
+          )}
+          {scannedCode && (
+            <div className="absolute inset-0 flex items-center justify-center bg-green-800 bg-opacity-75 text-white text-center p-4">
+              <CheckCircle size={48} className="mb-2" />
+              <p className="text-lg font-semibold">Scanned: {scannedCode}</p>
+            </div>
+          )}
+        </div>
 
         {/* Instructions */}
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -233,29 +257,36 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
         </div>
 
         {/* Controls */}
-        <div className="flex space-x-3">
+        <div className="flex space-x-2">
           {!isScanning ? (
             <button
               onClick={startScanning}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center space-x-2"
+              className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-blue-700 transition-colors"
             >
-              <Camera className="w-4 h-4" />
-              <span>Start Scanning</span>
+              <Camera size={20} />
+              <span>Start</span>
             </button>
           ) : (
             <button
               onClick={stopScanning}
-              className="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg font-medium transition-colors"
+              className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-red-600 transition-colors"
             >
-              Stop Scanning
+              <X size={20} />
+              <span>Stop</span>
             </button>
           )}
-          
+          <button
+            onClick={switchCamera}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center"
+            title="Switch camera"
+          >
+            <RotateCcw size={20} />
+          </button>
           <button
             onClick={handleClose}
-            className="px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
           >
-            Cancel
+            Close
           </button>
         </div>
       </motion.div>
