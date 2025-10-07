@@ -31,6 +31,8 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+  const [silenceTimer, setSilenceTimer] = useState<NodeJS.Timeout | null>(null);
+  const [lastSoundTime, setLastSoundTime] = useState<number>(0);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -38,11 +40,57 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        } 
+      });
       
+      const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+
+      // Set up audio context for voice activity detection
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const analyser = audioContext.createAnalyser();
+      const microphone = audioContext.createMediaStreamSource(stream);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      microphone.connect(analyser);
+      analyser.fftSize = 256;
+      
+      let isDetecting = true;
+      const detectVoice = () => {
+        if (!isDetecting) return;
+        
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+        
+        if (average > 20) { // Threshold for voice detection
+          setLastSoundTime(Date.now());
+          if (silenceTimer) {
+            clearTimeout(silenceTimer);
+            setSilenceTimer(null);
+          }
+        } else {
+          // Check if we've been silent for too long
+          const silenceDuration = Date.now() - lastSoundTime;
+          if (silenceDuration > 2000 && lastSoundTime > 0) { // 2 seconds of silence
+            if (!silenceTimer) {
+              const timer = setTimeout(() => {
+                if (isRecording) {
+                  stopRecording();
+                }
+              }, 1000); // Wait 1 more second before stopping
+              setSilenceTimer(timer);
+            }
+          }
+        }
+        
+        requestAnimationFrame(detectVoice);
+      };
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -51,6 +99,8 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
       };
 
       mediaRecorder.onstop = async () => {
+        isDetecting = false;
+        audioContext.close();
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/m4a' });
         
         try {
@@ -67,6 +117,10 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
       mediaRecorder.start();
       setIsRecording(true);
       setRecordingDuration(0);
+      setLastSoundTime(Date.now());
+
+      // Start voice detection
+      detectVoice();
       
       // Start duration counter
       intervalRef.current = setInterval(() => {
@@ -87,6 +141,11 @@ const FoodLogInterface: React.FC<FoodLogInterfaceProps> = ({
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+      
+      if (silenceTimer) {
+        clearTimeout(silenceTimer);
+        setSilenceTimer(null);
       }
     }
   };

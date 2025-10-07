@@ -1,17 +1,20 @@
 headersOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
+functionsDirectory = "/Users/matt/Desktop/Nu-food-logger/frontend/netlify/functions"
+functionsDirectoryOrigin = "config-v1"
 
 [functions]
 
 [functions."*"]
 
 [build]
-publish = "/Users/matt/Desktop/Nu-food-logger/frontend/build"
+publish = "/Users/matt/Desktop/Nu-food-logger/frontend/frontend/build"
 publishOrigin = "config"
 commandOrigin = "config"
 base = "/Users/matt/Desktop/Nu-food-logger/frontend"
-command = "npm run build"
+command = "cd frontend && npm run build"
+functions = "/Users/matt/Desktop/Nu-food-logger/frontend/netlify/functions"
 
 [build.environment]
 NODE_VERSION = "18"
